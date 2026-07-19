@@ -16,6 +16,11 @@ class Settings:
     min_approval_score: int
     min_face_score: int
     min_liveness_score: int
+    provider_version: str = "2.4.1"
+    face_model_version: str = "arcface-local-v1"
+    liveness_model_version: str = "chainfx-liveness-v1"
+    ocr_model_version: str = "local-ocr-v1"
+    fraud_model_version: str = "fraud-engine-v3"
 
     @property
     def real_models_available(self) -> bool:
@@ -34,4 +39,9 @@ def load_settings() -> Settings:
         min_approval_score=int(os.getenv("KYC_MIN_APPROVAL_SCORE", "88")),
         min_face_score=int(os.getenv("KYC_MIN_FACE_SCORE", "86")),
         min_liveness_score=int(os.getenv("KYC_MIN_LIVENESS_SCORE", "82")),
+        provider_version=os.getenv("KYC_PROVIDER_VERSION", "2.4.1").strip(),
+        face_model_version=os.getenv("KYC_FACE_MODEL_VERSION", "arcface-local-v1").strip(),
+        liveness_model_version=os.getenv("KYC_LIVENESS_MODEL_VERSION", "chainfx-liveness-v1").strip(),
+        ocr_model_version=os.getenv("KYC_OCR_MODEL_VERSION", "local-ocr-v1").strip(),
+        fraud_model_version=os.getenv("KYC_FRAUD_MODEL_VERSION", "fraud-engine-v3").strip(),
     )
