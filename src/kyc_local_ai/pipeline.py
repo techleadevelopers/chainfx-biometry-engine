@@ -6,11 +6,14 @@ from typing import Any
 
 from .config import Settings
 from .decision_engine import decide
+from .device_intelligence import evaluate_device
 from .face import compare_document_face, embedding_hash
 from .fraud_engine import evaluate_fraud
+from .identity_graph import build_identity_graph
 from .liveness import analyze_video_liveness
 from .media import cleanup, fetch_file
 from .media_probe import probe
+from .model_registry import model_versions
 from .ocr import analyze_document
 from .workflow import StepTimer, event
 
@@ -45,6 +48,10 @@ def analyze(payload: dict[str, Any], settings: Settings) -> dict[str, Any]:
         with timer.measure("face_ms"):
             face_score, embedding, face_details = compare_document_face(reference_frame, settings.real_models_available)
         events.append(event("face_completed", score=face_score))
+        current_embedding_hash = embedding_hash(embedding, settings.face_biometry_secret)
+
+        with timer.measure("device_ms"):
+            device_trust = evaluate_device(payload)
 
         flags: list[str] = list(media_flags)
         if not settings.real_models_available:
@@ -65,6 +72,8 @@ def analyze(payload: dict[str, Any], settings: Settings) -> dict[str, Any]:
                 ip_address=payload.get("IPAddress", ""),
             )
         flags.extend(fraud_flags)
+        if device_trust["risk"] == "HIGH":
+            flags.append("device_high_risk")
 
         with timer.measure("scoring_ms"):
             final_score = round(
@@ -72,7 +81,8 @@ def analyze(payload: dict[str, Any], settings: Settings) -> dict[str, Any]:
                 + face_score * 0.28
                 + liveness_score * 0.32
                 + (100 - replay_risk) * 0.08
-                + (100 - risk_score) * 0.08
+                + (100 - risk_score) * 0.04
+                + device_trust["score"] * 0.04
             )
             final_score = max(0, min(final_score, 100))
 
@@ -93,6 +103,8 @@ def analyze(payload: dict[str, Any], settings: Settings) -> dict[str, Any]:
         return {
             "provider": "chainfx_local_ai",
             "model_version": "chainfx-local-ai-service-v1",
+            "provider_version": settings.provider_version,
+            "model_versions": model_versions(settings),
             "decision": decision,
             "score": final_score,
             "document_score": document_score,
@@ -103,7 +115,7 @@ def analyze(payload: dict[str, Any], settings: Settings) -> dict[str, Any]:
             "risk_score": risk_score,
             "latency_ms": int((time.time() - started) * 1000),
             "embedding": embedding,
-            "embedding_hash": embedding_hash(embedding, settings.face_biometry_secret),
+            "embedding_hash": current_embedding_hash,
             "flags": sorted(set(flags)),
             "reasons": reasons,
             "details": {
@@ -128,6 +140,14 @@ def analyze(payload: dict[str, Any], settings: Settings) -> dict[str, Any]:
                 "face": face_details,
                 "liveness": liveness_details,
                 "fraud": fraud_details,
+                "device_trust": device_trust,
+                "identity_graph": build_identity_graph(payload, current_embedding_hash),
+                "duplicate_detection": {
+                    "method": "external_vector_index_hook",
+                    "top_k": 20,
+                    "provider_persists_index": False,
+                    "status": "pending_gateway_vector_search",
+                },
                 "required_models": ["FACE_EMBEDDING_ONNX", "LIVENESS_ONNX"],
             },
         }
