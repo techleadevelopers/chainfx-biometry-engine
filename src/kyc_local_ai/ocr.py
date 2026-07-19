@@ -6,6 +6,10 @@ from typing import Any
 from .quality import image_quality
 
 
+def empty_field(name: str) -> dict[str, Any]:
+    return {"value": "", "confidence": 0.0, "field": name}
+
+
 def analyze_document(front: Path | None, back: Path | None) -> tuple[int, dict[str, Any]]:
     front_score, front_details = image_quality(front)
     back_score, back_details = image_quality(back)
@@ -15,9 +19,21 @@ def analyze_document(front: Path | None, back: Path | None) -> tuple[int, dict[s
         flags.append("front_quality_low")
     if back_score < 70:
         flags.append("back_quality_low")
+    # Production hook: replace these empty fields with PaddleOCR/local OCR output.
+    structured = {
+        "name": empty_field("name"),
+        "cpf": empty_field("cpf"),
+        "birth_date": empty_field("birth_date"),
+        "document_number": empty_field("document_number"),
+        "issuer": empty_field("issuer"),
+        "issue_date": empty_field("issue_date"),
+        "expiry_date": empty_field("expiry_date"),
+    }
+
     return score, {
         "method": "quality_and_ocr_hook",
-        "production_model": "OCR_PROVIDER_URL_or_local_ocr",
+        "production_model": "PADDLEOCR_OR_LOCAL_OCR",
+        "ocr": structured,
         "front": front_details,
         "back": back_details,
         "flags": flags,
