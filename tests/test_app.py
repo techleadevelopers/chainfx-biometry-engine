@@ -10,6 +10,7 @@ from kyc_local_ai.config import Settings
 class AppContractTest(unittest.TestCase):
     def setUp(self) -> None:
         app_module._rate_window.clear()
+        app_module._review_cache.clear()
         app_module.settings = Settings(
             host="127.0.0.1",
             port=9097,
@@ -70,6 +71,63 @@ class AppContractTest(unittest.TestCase):
             self.assertIn(key, data)
         self.assertEqual(data["embedding"], [0.1, -0.2])
         self.assertEqual(response.headers.get("X-Request-ID"), "req-1")
+
+    def test_models_endpoint_returns_registry(self) -> None:
+        response = self.client.get("/models")
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertEqual(data["provider"], "chainfx_local_ai")
+        self.assertEqual(data["models"]["face_embedding"]["embedding_dim"], 512)
+        self.assertIn("face_embedding", data["model_versions"])
+
+    def test_metrics_endpoint_exports_prometheus_text(self) -> None:
+        response = self.client.get("/metrics")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("kyc_requests_total", response.get_data(as_text=True))
+
+    def test_review_endpoint_returns_cached_analysis_without_embedding(self) -> None:
+        expected = {
+            "provider": "chainfx_local_ai",
+            "provider_version": "2.4.1",
+            "model_versions": {"face_embedding": "arcface-local-v1"},
+            "decision": "manual_review",
+            "score": 80,
+            "document_score": 90,
+            "face_match_score": 86,
+            "liveness_score": 82,
+            "replay_risk_score": 10,
+            "duplicate_score": 100,
+            "risk_score": 10,
+            "latency_ms": 12,
+            "embedding": [0.1, -0.2],
+            "embedding_hash": "hash",
+            "flags": [],
+            "reasons": [],
+            "details": {
+                "document": {},
+                "face": {},
+                "liveness": {},
+                "rules": [],
+                "timings_ms": {},
+                "media": {},
+            },
+        }
+        with patch("kyc_local_ai.app.analyze", return_value=expected):
+            self.client.post(
+                "/analyze",
+                headers={"Authorization": "Bearer secret"},
+                json={"RequestID": "req-review"},
+            )
+
+        response = self.client.get("/review/req-review", headers={"Authorization": "Bearer secret"})
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertEqual(data["request_id"], "req-review")
+        self.assertNotIn("embedding", data)
+        self.assertNotIn("embedding_hash", data)
 
     def test_analyze_rejects_invalid_schema(self) -> None:
         response = self.client.post(
