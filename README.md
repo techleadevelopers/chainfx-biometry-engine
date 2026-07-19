@@ -49,11 +49,13 @@ The provider is organized as modular KYC infrastructure. Each module can evolve 
 - **Risk Scoring**: combines document quality, face match, liveness, replay risk, duplicate risk and contextual signals into a final score.
 - **Fraud Engine**: flags screen replay, low-quality evidence, missing models, suspicious motion, duplicate face hashes and manual-review cases.
 - **Metrics & Benchmarking**: exposes latency and decision metadata through the gateway metrics flow and supports external benchmark scripts.
+- **Decision Engine**: produces auditable rule results, reasons and final decision without hiding everything behind a single score.
+- **Workflow Events**: returns simple state events such as media received, OCR completed, liveness completed, face completed and decision completed.
 
 ## Variáveis
 
 ```text
-KYC_PROVIDER_HOST=127.0.0.1
+KYC_PROVIDER_HOST=0.0.0.0
 KYC_PROVIDER_PORT=9097
 KYC_PROVIDER_API_KEY=local-secret
 FACE_BIOMETRY_SECRET=secret-forte
@@ -64,6 +66,25 @@ KYC_MIN_APPROVAL_SCORE=88
 KYC_MIN_FACE_SCORE=86
 KYC_MIN_LIVENESS_SCORE=82
 ```
+
+Generate production secrets:
+
+```powershell
+.\scripts\generate_secrets.ps1
+```
+
+Use the same generated API key on both sides:
+
+```text
+chainfx-kyc-provider:
+KYC_PROVIDER_API_KEY=<generated>
+
+payment-gateway:
+KYC_ENGINE_PROVIDER_API_KEY=<same generated value>
+KYC_ENGINE_PROVIDER_URL=https://<your-kyc-provider-cloud-url>/analyze
+```
+
+Use the same `FACE_BIOMETRY_SECRET` in `payment-gateway` and keep it stable. Rotating this secret requires a planned biometric re-enrollment or a key-version migration strategy.
 
 ## Rodar Local
 
@@ -80,6 +101,50 @@ Health:
 ```powershell
 Invoke-RestMethod http://127.0.0.1:9097/health
 ```
+
+## Tests
+
+Run before publishing this folder as its own repository:
+
+```powershell
+cd C:\Users\Paulo\Desktop\payment-gateway\chainfx-kyc-provider
+.\run_tests.ps1
+```
+
+The suite validates:
+
+- `/health` contract.
+- `/analyze` bearer-token protection.
+- `/analyze` response shape expected by `payment-gateway`.
+- Embedding and `embedding_hash` are returned.
+- The service does not approve KYC when local AI models are missing.
+- High scores with configured models can approve.
+- Low liveness rejects.
+- Low face match rejects.
+- Schema validation rejects invalid payloads.
+- Decision engine returns rules and explainable reasons.
+- Pipeline returns per-stage timings and workflow events.
+
+To confirm the full backend persistence path, run an integration KYC request through `payment-gateway` and then check:
+
+```sql
+SELECT decision, score, latency_ms, flags
+FROM kyc_analysis_results
+ORDER BY created_at DESC
+LIMIT 5;
+
+SELECT user_id, latest_kyc_request_id, embedding_hash, model_version, consent_at
+FROM user_face_biometrics
+ORDER BY updated_at DESC
+LIMIT 5;
+```
+
+Expected no-gap behavior:
+
+- `kyc_analysis_results` must be created for each processed KYC request.
+- `user_face_biometrics` must be created only after `approved`.
+- `face_embedding_encrypted` must be populated in the database, but never returned in API JSON.
+- If models are missing, decision must be `manual_review`, not `approved`.
 
 No `payment-gateway`:
 
