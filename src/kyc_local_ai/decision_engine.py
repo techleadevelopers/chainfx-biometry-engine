@@ -12,9 +12,18 @@ class RuleResult:
     status: str
     reason: str
     value: Any = None
+    expected: Any = None
 
     def as_dict(self) -> dict[str, Any]:
-        return {"id": self.id, "status": self.status, "reason": self.reason, "value": self.value}
+        return {
+            "id": self.id,
+            "rule": self.id,
+            "status": self.status.upper(),
+            "reason": self.reason,
+            "expected": self.expected,
+            "received": self.value,
+            "value": self.value,
+        }
 
 
 def decide(
@@ -30,13 +39,13 @@ def decide(
     flags: list[str],
 ) -> tuple[str, list[str], list[dict[str, Any]]]:
     rules = [
-        RuleResult("document_quality", "pass" if document_score >= 70 else "fail", "document quality threshold", document_score),
-        RuleResult("face_similarity", "pass" if face_score >= settings.min_face_score else "fail", "face match threshold", face_score),
-        RuleResult("liveness", "pass" if liveness_score >= settings.min_liveness_score else "fail", "liveness threshold", liveness_score),
-        RuleResult("replay_risk", "pass" if replay_risk < 70 else "fail", "replay risk threshold", replay_risk),
-        RuleResult("fraud_risk", "pass" if risk_score < 70 else "fail", "fraud risk threshold", risk_score),
-        RuleResult("models_available", "pass" if models_available else "review", "local ONNX models configured", models_available),
-        RuleResult("final_score", "pass" if score >= settings.min_approval_score else "review", "approval score threshold", score),
+        RuleResult("document_quality", "pass" if document_score >= 70 else "fail", "document quality threshold", document_score, ">=70"),
+        RuleResult("face_similarity", "pass" if face_score >= settings.min_face_score else "fail", "face match threshold", face_score, f">={settings.min_face_score}"),
+        RuleResult("liveness", "pass" if liveness_score >= settings.min_liveness_score else "fail", "liveness threshold", liveness_score, f">={settings.min_liveness_score}"),
+        RuleResult("replay_risk", "pass" if replay_risk < 70 else "fail", "replay risk threshold", replay_risk, "<70"),
+        RuleResult("fraud_risk", "pass" if risk_score < 70 else "fail", "fraud risk threshold", risk_score, "<70"),
+        RuleResult("models_available", "pass" if models_available else "review", "local ONNX models configured", models_available, True),
+        RuleResult("final_score", "pass" if score >= settings.min_approval_score else "review", "approval score threshold", score, f">={settings.min_approval_score}"),
     ]
 
     reasons: list[str] = []
