@@ -7,7 +7,7 @@ from .quality import image_quality
 
 
 def empty_field(name: str) -> dict[str, Any]:
-    return {"value": "", "confidence": 0.0, "field": name}
+    return {"value": "", "confidence": 0.0, "field": name, "valid": False, "reason": "ocr_model_not_connected"}
 
 
 def analyze_document(front: Path | None, back: Path | None) -> tuple[int, dict[str, Any]]:
@@ -34,6 +34,17 @@ def analyze_document(front: Path | None, back: Path | None) -> tuple[int, dict[s
         "method": "quality_and_ocr_hook",
         "production_model": "PADDLEOCR_OR_LOCAL_OCR",
         "ocr": structured,
+        "normalization": {
+            "cpf_check_digits": "pending_model_output",
+            "name_invalid_characters": "pending_model_output",
+            "date_coherence": "pending_model_output",
+            "document_expired": "pending_model_output",
+        },
+        "cross_validation": {
+            "cpf_matches_user": "pending_gateway_context",
+            "name_matches_user": "pending_gateway_context",
+            "birth_date_matches_user": "pending_gateway_context",
+        },
         "front": front_details,
         "back": back_details,
         "flags": flags,
