@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import patch
 
 from kyc_local_ai.config import Settings
+from kyc_local_ai.face import deterministic_embedding
 from kyc_local_ai.pipeline import analyze
 
 
@@ -51,6 +52,11 @@ class PipelineTest(unittest.TestCase):
         self.assertIn("workflow_events", result["details"])
         self.assertIn("media", result["details"])
         self.assertIn("reasons", result)
+
+    def test_embedding_contract_is_512_dimensions(self) -> None:
+        embedding = deterministic_embedding(b"frame", "user-1")
+
+        self.assertEqual(len(embedding), 512)
 
     def test_real_models_can_approve_when_scores_are_high_and_no_flags(self) -> None:
         with patch("kyc_local_ai.pipeline.fetch_file", return_value=None), \
