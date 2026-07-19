@@ -43,10 +43,23 @@ def analyze_video_liveness(path: Path | None) -> tuple[int, int, dict[str, Any],
     motion_score = max(0, min(int(avg_motion * 7), 100))
     replay_risk = max(0, min(100 - motion_score, 100))
     _, encoded = cv2.imencode(".jpg", frames[len(frames) // 2])
+    modules = {
+        "motion": {"score": motion_score, "status": "PASS" if motion_score >= 60 else "REVIEW"},
+        "blink": {"score": 0, "status": "MODEL_REQUIRED"},
+        "head_pose": {"score": 0, "status": "MODEL_REQUIRED"},
+        "replay": {"score": 100 - replay_risk, "status": "PASS" if replay_risk < 70 else "FAIL"},
+        "screen": {"score": 0, "status": "MODEL_REQUIRED"},
+        "print": {"score": 0, "status": "MODEL_REQUIRED"},
+        "texture": {"score": 0, "status": "MODEL_REQUIRED"},
+        "reflection": {"score": 0, "status": "MODEL_REQUIRED"},
+        "depth": {"score": 0, "status": "MODEL_REQUIRED"},
+        "challenge": {"score": 0, "status": "MODEL_REQUIRED"},
+    }
 
     return motion_score, replay_risk, {
         "frames": len(frames),
         "avg_motion": avg_motion,
         "method": "motion_baseline",
         "production_model": "LIVENESS_ONNX",
+        "modules": modules,
     }, encoded.tobytes()
