@@ -168,3 +168,112 @@ chainfx-kyc-provider
 ```
 
 Sem modelos reais configurados, o serviço retorna `manual_review` com flag `local_models_not_configured`. Ele não aprova biometria bancária falsa.
+
+## Roadmap
+
+### Phase 1 - Real OCR
+
+Implement local OCR, preferably through a self-hosted OCR module such as PaddleOCR or an equivalent internal engine.
+
+Expected fields:
+
+```json
+{
+  "ocr": {
+    "name": { "value": "Joao Silva", "confidence": 0.99 },
+    "cpf": { "value": "12345678909", "confidence": 0.98 },
+    "birth_date": { "value": "1990-01-01", "confidence": 0.97 },
+    "document_number": { "value": "1234567", "confidence": 0.95 },
+    "issuer": { "value": "SSP", "confidence": 0.91 },
+    "issue_date": { "value": "2020-01-01", "confidence": 0.90 },
+    "expiry_date": { "value": "2030-01-01", "confidence": 0.90 }
+  }
+}
+```
+
+### Phase 2 - Face Detection
+
+Before embedding generation:
+
+```text
+document/video frame -> detect face -> align -> crop -> normalize -> embedding
+```
+
+### Phase 3 - Real Face Embedding
+
+Replace the current placeholder path with a local ONNX model:
+
+```text
+face crop -> FACE_EMBEDDING_ONNX -> 512 floats -> similarity
+```
+
+The provider returns the embedding to `payment-gateway`; the gateway encrypts and stores it.
+
+### Phase 4 - Real Liveness
+
+Use the guided video to detect:
+
+- head movement;
+- blink;
+- yaw/pitch/roll;
+- optical flow;
+- replay;
+- screen reflection;
+- deepfake/synthetic texture.
+
+### Phase 5 - Benchmark Suite
+
+Benchmark OCR, embedding, liveness and scoring with local fixtures:
+
+```text
+100 videos -> OCR -> embedding -> liveness -> score -> metrics
+```
+
+Current benchmark runner:
+
+```powershell
+.\scripts\benchmark_provider.ps1 -BaseUrl http://127.0.0.1:9097 -Runs 100
+```
+
+Metrics:
+
+- P50/P95/P99;
+- throughput;
+- CPU/memory in future;
+- approval/manual/rejected distribution;
+- FAR/FRR/EER when labeled datasets exist.
+
+### Phase 6 - Vector Similarity
+
+The provider must not own the database. Vector search should be coordinated by `payment-gateway` or a dedicated vector service:
+
+```text
+new embedding -> top-k search -> candidate duplicate faces -> manual review
+```
+
+### Phase 7 - Explainability
+
+Every response should include `rules`, `reasons`, `flags`, `timings_ms` and `workflow_events`.
+
+### Phase 8 - Observability
+
+Track:
+
+- approval rate;
+- manual-review rate;
+- similarity distribution;
+- liveness distribution;
+- per-stage latency.
+
+### Phase 9 - Security
+
+- No database in this provider.
+- No financial business logic.
+- No image/video/embedding in logs.
+- API-key auth today; mTLS can be added later.
+- Gateway encrypts embeddings at rest.
+- Retention/deletion policy remains in `payment-gateway`.
+
+### Phase 10 - Documentation
+
+Keep README focused on architecture, API contract, pipeline diagram, benchmark and operational limits.
