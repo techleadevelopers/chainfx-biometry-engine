@@ -277,3 +277,52 @@ Track:
 ### Phase 10 - Documentation
 
 Keep README focused on architecture, API contract, pipeline diagram, benchmark and operational limits.
+
+## Production Inference Contract
+
+This provider is an inference service only. It never owns the KYC database, never stores embeddings permanently and never applies financial business rules. `payment-gateway` remains responsible for persistence, encryption at rest, audit trails, review policies, account decisions and vector search.
+
+Current production-facing contract:
+
+- `POST /analyze`: analyzes document URLs, guided facial video and context signals.
+- `GET /health`: reports service health and local model availability.
+- `GET /models`: returns provider version, model versions, configured paths and declared capabilities.
+- `GET /metrics`: exports Prometheus text metrics for request, decision and latency monitoring.
+- `GET /review/{request_id}`: returns a volatile manual-review snapshot for recent requests without exposing raw embedding data.
+
+The face embedding contract is 512 floats. The provider returns the embedding to the gateway; the gateway encrypts it with AES-256-GCM and persists it in the ecosystem database. The provider only returns a signed `embedding_hash` for correlation and duplicate hooks.
+
+Every decision rule includes `rule`, `expected`, `received` and `status`, so manual review can explain why the request was approved, rejected or sent to review.
+
+Additional model/version env vars:
+
+```text
+KYC_PROVIDER_VERSION=2.4.1
+KYC_FACE_MODEL_VERSION=arcface-local-v1
+KYC_LIVENESS_MODEL_VERSION=chainfx-liveness-v1
+KYC_OCR_MODEL_VERSION=local-ocr-v1
+KYC_FRAUD_MODEL_VERSION=fraud-engine-v3
+```
+
+Operational endpoints:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:9097/models
+Invoke-RestMethod http://127.0.0.1:9097/metrics
+Invoke-RestMethod http://127.0.0.1:9097/review/<request-id> -Headers @{ Authorization = "Bearer $env:KYC_PROVIDER_API_KEY" }
+```
+
+The review endpoint is a volatile operational cache. It is not the system of record and it does not expose raw embeddings.
+
+## Production Inference Roadmap
+
+Priority order:
+
+1. Face embedding real: video frame extraction, face detection, face alignment, ONNX embedding, 512 floats and cosine similarity.
+2. OCR production: local OCR, field normalization, CPF check digits, name/date validation, expiry checks and confidence per field.
+3. Liveness: motion, blink, head pose, replay, screen, print, texture, reflection, depth and guided challenge scoring.
+4. Device intelligence: emulator, root, VPN, Frida, Magisk, timezone, GPS, locale, Play Integrity and hardware trust scoring.
+5. Identity graph: user, device, face, document, IP, phone, email, wallet and PIX key relationships emitted for gateway persistence.
+6. Duplicate detection: top-k vector similarity through gateway/vector infrastructure, not provider-owned storage.
+7. Benchmark quality: FAR, FRR, EER, ROC, accuracy, recall and precision when labeled datasets are available.
+8. Observability: Prometheus metrics for request totals, per-stage latency and decision distribution.
